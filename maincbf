@@ -2,7 +2,7 @@ import random
 import hashlib
 
 # ============================================================
-# ⚙️ PARAMETERS
+# PARAMETERS
 # ============================================================
 
 # Size of Bloom filter (number of counters)
@@ -14,7 +14,7 @@ n = 1000
 
 
 # ============================================================
-# 📚 WORD POOL (Synthetic English-like dataset)
+# WORD POOL (1000 to 10000 Synthetic English-like dataset)
 # ============================================================
 # A small curated vocabulary is expanded with suffixes
 # to simulate a large dataset (approx 1000+ unique words)
@@ -34,7 +34,7 @@ word_pool = [
 
 
 # ============================================================
-# 🔁 DATASET GENERATION
+# DATASET GENERATION
 # ============================================================
 
 def expand_words(pool, target):
@@ -68,7 +68,7 @@ test = words[n:n+500]
 
 
 # ============================================================
-# 🔐 HASH FUNCTION
+# HASH FUNCTION
 # ============================================================
 
 def hash_func(word, seed):
@@ -82,7 +82,7 @@ def hash_func(word, seed):
 
 
 # ============================================================
-# 🧠 CONTENT ENCODING (FEATURE EXTRACTION)
+# CONTENT ENCODING (FEATURE EXTRACTION)
 # ============================================================
 
 def get_content_bits(word):
@@ -106,7 +106,7 @@ def get_content_bits(word):
 
 
 # ============================================================
-# 🟥 STANDARD COUNTING BLOOM FILTER
+# STANDARD COUNTING BLOOM FILTER
 # ============================================================
 
 def insert_standard(cbf, word):
@@ -132,7 +132,7 @@ def query_standard(cbf, word):
 
 
 # ============================================================
-# 🟩 CONTENT-AWARE COUNTING BLOOM FILTER
+# CONTENT-AWARE COUNTING BLOOM FILTER
 # ============================================================
 
 def insert_content(cbf, store, word):
@@ -178,7 +178,7 @@ def query_content(cbf, store, word):
 
 
 # ============================================================
-# 📊 FALSE POSITIVE RATE EXPERIMENT
+# FALSE POSITIVE RATE EXPERIMENT
 # ============================================================
 
 def compute_fpr():
@@ -224,7 +224,7 @@ def compute_fpr():
 
 
 # ============================================================
-# 🚀 RUN EXPERIMENT
+# RUN EXPERIMENT
 # ============================================================
 
 fpr_std, fpr_cont = compute_fpr()
