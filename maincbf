@@ -1,0 +1,233 @@
+import random
+import hashlib
+
+# ============================================================
+# ⚙️ PARAMETERS
+# ============================================================
+
+# Size of Bloom filter (number of counters)
+# NOTE: very small compared to n → intentionally high collision regime
+m = 100
+
+# Number of inserted elements (training set size)
+n = 1000
+
+
+# ============================================================
+# 📚 WORD POOL (Synthetic English-like dataset)
+# ============================================================
+# A small curated vocabulary is expanded with suffixes
+# to simulate a large dataset (approx 1000+ unique words)
+
+word_pool = [
+    "apple","banana","orange","grape","peach","cherry","mango","lemon","melon","berry",
+    "table","chair","window","door","floor","ceiling","light","switch","socket","wall",
+    "happy","joyful","smile","laugh","cheer","delight","excite","glad","bright","funny",
+    "river","ocean","lake","water","stream","wave","shore","beach","coast","harbor",
+    "computer","laptop","keyboard","mouse","screen","monitor","printer","network","server","cloud",
+    "science","physics","chemistry","biology","math","algebra","geometry","calculus","theory","logic",
+    "school","teacher","student","class","lesson","exam","study","learn","write","read",
+    "music","guitar","piano","drum","violin","song","melody","rhythm","sound","tune",
+    "car","train","plane","truck","bus","vehicle","engine","wheel","drive","road",
+    "food","bread","rice","meat","vegetable","fruit","drink","water","juice","milk"
+]
+
+
+# ============================================================
+# 🔁 DATASET GENERATION
+# ============================================================
+
+def expand_words(pool, target):
+    """
+    Expands a small vocabulary into a large synthetic dataset.
+
+    Each word is randomly selected and appended with a numeric suffix.
+    This simulates unique tokens while preserving semantic similarity.
+    """
+    words = set()
+
+    while len(words) < target:
+        w = random.choice(pool)
+        suffix = str(random.randint(0, 999))
+        words.add(w + suffix)
+
+    return list(words)
+
+
+# Generate dataset (~1500 words available)
+words = expand_words(word_pool, 1500)
+
+# Shuffle to remove ordering bias
+random.shuffle(words)
+
+# Training set (inserted into Bloom filter)
+inserted = words[:n]
+
+# Test set (used to estimate false positives)
+test = words[n:n+500]
+
+
+# ============================================================
+# 🔐 HASH FUNCTION
+# ============================================================
+
+def hash_func(word, seed):
+    """
+    Generates deterministic hash indices using MD5.
+
+    Each seed acts as a different Bloom filter hash function.
+    Output is mapped into range [0, m).
+    """
+    return int(hashlib.md5((word + str(seed)).encode()).hexdigest(), 16) % m
+
+
+# ============================================================
+# 🧠 CONTENT ENCODING (FEATURE EXTRACTION)
+# ============================================================
+
+def get_content_bits(word):
+    """
+    Extracts a lightweight structural fingerprint of a word.
+
+    We use:
+    - left character
+    - middle character
+    - right character
+
+    Each character is compressed into 2-bit space (mod 4).
+
+    This acts as a weak but fast "content signature".
+    """
+    left = ord(word[0]) % 4
+    mid = ord(word[len(word)//2]) % 4
+    right = ord(word[-1]) % 4
+
+    return (left, mid, right)
+
+
+# ============================================================
+# 🟥 STANDARD COUNTING BLOOM FILTER
+# ============================================================
+
+def insert_standard(cbf, word):
+    """
+    Inserts a word into a standard counting Bloom filter.
+
+    Only updates counters at 3 hashed positions.
+    """
+    for i in range(3):
+        cbf[hash_func(word, i)] += 1
+
+
+def query_standard(cbf, word):
+    """
+    Queries membership.
+
+    If all hashed counters are non-zero → likely present.
+    """
+    for i in range(3):
+        if cbf[hash_func(word, i)] == 0:
+            return False
+    return True
+
+
+# ============================================================
+# 🟩 CONTENT-AWARE COUNTING BLOOM FILTER
+# ============================================================
+
+def insert_content(cbf, store, word):
+    """
+    Inserts word into Bloom filter AND stores content fingerprint.
+
+    Each index stores:
+    - counter (frequency estimate)
+    - set of observed content signatures
+    """
+    bits = get_content_bits(word)
+
+    for i in range(3):
+        idx = hash_func(word, i)
+
+        cbf[idx] += 1
+        store[idx].add(bits)
+
+
+def query_content(cbf, store, word):
+    """
+    Membership test with an additional verification layer:
+
+    Step 1: Standard Bloom check
+    Step 2: Content fingerprint must match at all positions
+
+    This reduces false positives significantly.
+    """
+    bits = get_content_bits(word)
+
+    for i in range(3):
+        idx = hash_func(word, i)
+
+        # Standard Bloom rejection
+        if cbf[idx] == 0:
+            return False
+
+        # Content-based filtering (extra constraint)
+        if bits not in store[idx]:
+            return False
+
+    return True
+
+
+# ============================================================
+# 📊 FALSE POSITIVE RATE EXPERIMENT
+# ============================================================
+
+def compute_fpr():
+    """
+    Runs full experiment:
+
+    1. Build standard CBF
+    2. Build content-aware CBF
+    3. Evaluate false positive rate on test set
+    """
+
+    # -------------------------
+    # Standard Bloom Filter
+    # -------------------------
+    cbf_std = [0]*m
+
+    for w in inserted:
+        insert_standard(cbf_std, w)
+
+    fp_std = 0
+    for w in test:
+        if w not in inserted and query_standard(cbf_std, w):
+            fp_std += 1
+
+
+    # -------------------------
+    # Content-Aware Bloom Filter
+    # -------------------------
+    cbf_cont = [0]*m
+    store = [set() for _ in range(m)]
+
+    for w in inserted:
+        insert_content(cbf_cont, store, w)
+
+    fp_cont = 0
+    for w in test:
+        if w not in inserted and query_content(cbf_cont, store, w):
+            fp_cont += 1
+
+
+    # Return normalized false positive rates
+    return fp_std/len(test), fp_cont/len(test)
+
+
+# ============================================================
+# 🚀 RUN EXPERIMENT
+# ============================================================
+
+fpr_std, fpr_cont = compute_fpr()
+
+print("FPR (Standard):", fpr_std)
+print("FPR (With Content Bits):", fpr_cont)
